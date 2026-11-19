@@ -70,6 +70,10 @@ npm run typecheck && npm run lint && npm run coverage
 
 The CI fails below **100 %** coverage of lines, branches, functions and statements.
 
+## Changelog
+
+See [CHANGELOG.md](CHANGELOG.md).
+
 ## License
 
 [MIT](LICENSE) © Mickael Saidi
