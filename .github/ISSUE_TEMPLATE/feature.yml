@@ -1,0 +1,22 @@
+name: Feature request
+description: Suggest a new option or function.
+labels: [enhancement]
+body:
+  - type: textarea
+    id: need
+    attributes:
+      label: Need
+      description: What you want to do, and why the current API does not allow it.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposal
+      description: The function or option you suggest, with an example call.
+      render: ts
+  - type: textarea
+    id: done-when
+    attributes:
+      label: Done when
+      description: How we will know it works.
