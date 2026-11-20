@@ -46,8 +46,40 @@ export interface GeocodingResult extends AnswerMetadata {
   addresses: Address[];
 }
 
+/** The index of the Géoplateforme a search looks in: addresses (the default), cadastral parcels, or points of interest. */
+export type SearchIndex = "address" | "parcel" | "poi";
+
+/** A cadastral parcel found in the `parcel` index of the Géoplateforme. */
+export interface Parcel {
+  /** The 14-character cadastral identifier, for example "95127000BA0187". */
+  id: string;
+  departmentcode: string;
+  municipalitycode: string;
+  section: string;
+  number: string;
+  sheet?: string;
+  city?: string;
+  score: number;
+  coordinates: Coordinates;
+}
+
+/** A point of interest (municipality, district, station, place…) found in the `poi` index of the Géoplateforme. */
+export interface PointOfInterest {
+  /** The main name of the place. */
+  toponym: string;
+  names: string[];
+  categories: string[];
+  postcodes: string[];
+  citycodes: string[];
+  cities: string[];
+  score: number;
+  coordinates: Coordinates;
+}
+
 /** The options of a search. */
 export interface SearchOptions {
+  /** The index to search in; `address` by default. Use `parcel` or `poi` (Géoplateforme only) to get parcels or points of interest. */
+  index?: "address";
   limit?: number;
   autocomplete?: boolean;
   type?: AddressType;
@@ -57,6 +89,16 @@ export interface SearchOptions {
   /** Drops the results whose score is below this value (the service scores from 0 to 1); no minimum by default. */
   minScore?: number;
   signal?: AbortSignal;
+}
+
+/** The options of a search in the `parcel` index of the Géoplateforme. */
+export interface ParcelSearchOptions extends Omit<SearchOptions, "index" | "type" | "autocomplete"> {
+  index: "parcel";
+}
+
+/** The options of a search in the `poi` index of the Géoplateforme. */
+export interface PointOfInterestSearchOptions extends Omit<SearchOptions, "index" | "type"> {
+  index: "poi";
 }
 
 /** The options of a reverse geocoding. */

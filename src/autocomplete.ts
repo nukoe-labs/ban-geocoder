@@ -1,5 +1,9 @@
-import type { Geocoder } from "./index.js";
 import type { Address, SearchOptions } from "./types.js";
+
+/** Anything that searches addresses like `geocoder.search`, such as a geocoder. */
+export interface AddressSearcher {
+  search(query: string, options?: SearchOptions): Promise<Address[]>;
+}
 
 /** The options of an autocompletion: the quiet time after the last keystroke, and the options of each search. */
 export interface AutocompleteOptions extends Omit<SearchOptions, "signal"> {
@@ -45,7 +49,7 @@ function waitForQuietTyping(delayMs: number, signal: AbortSignal): Promise<boole
 }
 
 /** Creates an autocompletion helper on a geocoder: it waits for `delayMs` of quiet typing and cancels the previous request. */
-export function createAutocomplete(geocoder: Pick<Geocoder, "search">, options: AutocompleteOptions): Autocomplete {
+export function createAutocomplete(geocoder: AddressSearcher, options: AutocompleteOptions): Autocomplete {
   checkDelay(options.delayMs);
   const { delayMs, ...searchOptions } = options;
   let currentController: AbortController | undefined;
@@ -72,7 +76,7 @@ export function createAutocomplete(geocoder: Pick<Geocoder, "search">, options: 
 }
 
 /** Sends the search, and resolves undefined instead of failing when a newer keystroke aborted it. */
-async function searchUnlessReplaced(geocoder: Pick<Geocoder, "search">, text: string, searchOptions: SearchOptions & { signal: AbortSignal }): Promise<Address[] | undefined> {
+async function searchUnlessReplaced(geocoder: AddressSearcher, text: string, searchOptions: SearchOptions & { signal: AbortSignal }): Promise<Address[] | undefined> {
   try {
     return await geocoder.search(text, searchOptions);
   } catch (error) {
