@@ -42,6 +42,8 @@ export interface SearchOptions {
   postcode?: string;
   citycode?: string;
   near?: Coordinates;
+  /** Drops the results whose score is below this value (the service scores from 0 to 1); no minimum by default. */
+  minScore?: number;
   signal?: AbortSignal;
 }
 

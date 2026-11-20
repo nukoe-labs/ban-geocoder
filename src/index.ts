@@ -158,6 +158,26 @@ function createFeatureReader(options: GeocoderOptions): FeatureReader {
   return readFeaturesOfUrl;
 }
 
+/** Checks that a minimum score, when given, is a finite number. */
+function checkMinimumScore(minScore: number | undefined): void {
+  if (minScore !== undefined && !Number.isFinite(minScore)) {
+    throw new RangeError(`minScore must be a finite number, not ${minScore}.`);
+  }
+}
+
+/** Keeps the addresses whose score reaches the minimum score, or all of them when no minimum is given. */
+function keepScoresFrom(addresses: Address[], minScore: number | undefined): Address[] {
+  if (minScore === undefined) {
+    return addresses;
+  }
+  const minimumScore = minScore;
+  /** Tells whether an address reaches the minimum score. */
+  function reachesMinimumScore(address: Address): boolean {
+    return address.score >= minimumScore;
+  }
+  return addresses.filter(reachesMinimumScore);
+}
+
 /** A geocoder bound to one BAN-compatible service (the IGN service, or your own Addok). */
 export interface Geocoder {
   search(query: string, options?: SearchOptions): Promise<Address[]>;
@@ -172,8 +192,10 @@ export function createGeocoder(options: GeocoderOptions = {}): Geocoder {
   /** Searches addresses that match a text, best match first. */
   async function search(query: string, searchOptions: SearchOptions = {}): Promise<Address[]> {
     const parameters = buildSearchParameters(query, searchOptions);
+    checkMinimumScore(searchOptions.minScore);
     const features = await readFeaturesOfUrl(`${baseUrl}/search/?${parameters}`, searchOptions.signal);
-    return features.map(toAddress);
+    const addresses = features.map(toAddress);
+    return keepScoresFrom(addresses, searchOptions.minScore);
   }
 
   /** Finds the addresses closest to a point, closest first. */

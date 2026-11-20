@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { createGeocoder, DEFAULT_BASE_URL, GeocodingError } from "../src/index.js";
-import type { FetchFunction } from "../src/index.js";
+import type { Address, FetchFunction } from "../src/index.js";
 
 const CERGY_FEATURE = {
   type: "Feature",
@@ -45,6 +45,11 @@ async function hangingFetch(_input: string, init?: { signal?: AbortSignal }): Pr
       reject(new Error("The operation was aborted"));
     });
   });
+}
+
+/** Gives the label of an address. */
+function readLabel(address: Address): string {
+  return address.label;
 }
 
 describe("search", function searchTests() {
@@ -94,6 +99,22 @@ describe("search", function searchTests() {
     const geocoder = createGeocoder({ fetch: buildFakeFetch({ features: [] }).fetch });
     await expect(geocoder.search(" ab ")).rejects.toThrow(RangeError);
     await expect(geocoder.search("x".repeat(201))).rejects.toThrow("3 to 200 characters");
+  });
+
+  it("drops the results below the minimum score", async function minimumScore() {
+    const weakFeature = { geometry: { coordinates: [2, 48] }, properties: { label: "Weak", score: 0.2 } };
+    const fake = buildFakeFetch({ features: [CERGY_FEATURE, weakFeature] });
+    const geocoder = createGeocoder({ fetch: fake.fetch });
+    const strongOnly = await geocoder.search("8 bd du port", { minScore: 0.49 });
+    const all = await geocoder.search("8 bd du port");
+    expect(strongOnly.map(readLabel)).toEqual(["8 Boulevard du Port 95000 Cergy"]);
+    expect(all.map(readLabel)).toEqual(["8 Boulevard du Port 95000 Cergy", "Weak"]);
+    expect(fake.urls[0]).toBe(`${DEFAULT_BASE_URL}/search/?q=8+bd+du+port`);
+  });
+
+  it("refuses a minimum score that is not a number", async function invalidMinimumScore() {
+    const geocoder = createGeocoder({ fetch: buildFakeFetch({ features: [] }).fetch });
+    await expect(geocoder.search("paris", { minScore: Number.NaN })).rejects.toThrow("minScore must be a finite number, not NaN.");
   });
 
   it("refuses a bias point outside the map", async function invalidBias() {

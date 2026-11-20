@@ -64,6 +64,7 @@ async function suggest(text: string) {
 | `cache` | `createGeocoder` | `{ size, ttlMs }`: keeps that many answers in memory for that long, keyed by URL (autocompletion repeats the same prefixes); no cache by default |
 | `limit`, `type` | `search`, `reverse` | number of results; `housenumber`, `street`, `locality` or `municipality` |
 | `autocomplete`, `postcode`, `citycode`, `near` | `search` | prefix search, filters, and a point that favours nearby results |
+| `minScore` | `search` | drops the results whose score (0 to 1) is below this value, so an unknown text does not place a pin far away; no minimum by default |
 | `signal` | `search`, `reverse` | cancels the call |
 
 Errors from the network or the service are thrown as `GeocodingError`, with the HTTP `status` when there is one,
