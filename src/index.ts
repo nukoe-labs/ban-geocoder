@@ -4,6 +4,8 @@ import { createApiCaller } from "./http.js";
 import type { Address, AddressType, AnswerMetadata, BanFeature, GeocodingResult, Coordinates, GeocoderOptions, ReverseOptions, SearchOptions } from "./types.js";
 
 export { distanceTo, isHouseNumber, toPostalLines } from "./address.js";
+export { createAutocomplete } from "./autocomplete.js";
+export type { Autocomplete, AutocompleteOptions } from "./autocomplete.js";
 export type { HouseNumberAddress } from "./address.js";
 export { GeocodingError } from "./errors.js";
 
