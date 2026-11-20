@@ -42,9 +42,10 @@ const [nearest] = await geocoder.reverse({ lat: 48.8584, lon: 2.2945 }, { limit:
 ### Helpers
 
 ```ts
-import { isHouseNumber, toPostalLines } from "ban-geocoder";
+import { distanceTo, isHouseNumber, toPostalLines } from "ban-geocoder";
 
 toPostalLines(best); // ["8 Boulevard du Port", "95000 CERGY"]
+distanceTo(best, { lat: 49.0365, lon: 2.0761 }); // meters (haversine), to sort or filter results around the user
 
 if (isHouseNumber(best)) {
   best.housenumber; // string, no longer string | undefined
