@@ -60,6 +60,8 @@ export interface GeocoderOptions {
   retries?: number;
   /** The first pause before a retry, doubled at each new try, unless the answer has a `Retry-After` header; 500 ms by default. */
   retryDelayMs?: number;
+  /** Spaces the requests of this geocoder evenly so that at most this number leave each second; no limit by default. */
+  maxRequestsPerSecond?: number;
 }
 
 /**
