@@ -5,7 +5,7 @@ import type { Address, AddressType, BanFeature, Coordinates, GeocoderOptions, Re
 
 export { GeocodingError } from "./errors.js";
 
-export type { Address, AddressType, CacheOptions, Coordinates, FetchFunction, FetchResponse, GeocoderOptions, GeocodingErrorCode, ReverseOptions, SearchOptions } from "./types.js";
+export type { Address, AddressType, CacheOptions, Coordinates, ProjectedCoordinates, FetchFunction, FetchResponse, GeocoderOptions, GeocodingErrorCode, ReverseOptions, SearchOptions } from "./types.js";
 
 /** The public BAN geocoding service run by IGN. */
 export const DEFAULT_BASE_URL = "https://data.geopf.fr/geocodage";
@@ -73,6 +73,25 @@ function readText(properties: Record<string, unknown>, name: string): string | u
   return value;
 }
 
+/** Reads a number property of a feature, or undefined when it is missing or not a finite number. */
+function readNumber(properties: Record<string, unknown>, name: string): number | undefined {
+  const value = properties[name];
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    return undefined;
+  }
+  return value;
+}
+
+/** Copies the Lambert 93 coordinates onto the address when the feature has both `x` and `y`. */
+function copyProjectedCoordinates(address: Address, properties: Record<string, unknown>): void {
+  const x = readNumber(properties, "x");
+  const y = readNumber(properties, "y");
+  if (x === undefined || y === undefined) {
+    return;
+  }
+  address.projected = { x, y };
+}
+
 /** Turns one BAN GeoJSON feature into a flat address. */
 function toAddress(feature: BanFeature): Address {
   const properties = feature.properties;
@@ -87,6 +106,7 @@ function toAddress(feature: BanFeature): Address {
   for (const field of OPTIONAL_TEXT_FIELDS) {
     copyTextField(address, properties, field);
   }
+  copyProjectedCoordinates(address, properties);
   return address;
 }
 

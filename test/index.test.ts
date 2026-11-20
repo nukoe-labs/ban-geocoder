@@ -13,6 +13,8 @@ const CERGY_FEATURE = {
     name: "8 Boulevard du Port",
     postcode: "95000",
     citycode: "95127",
+    x: 631468.28,
+    y: 6881710.34,
     city: "Cergy",
     context: "95, Val-d'Oise, Île-de-France",
     type: "housenumber",
@@ -61,6 +63,7 @@ describe("search", function searchTests() {
       city: "Cergy",
       citycode: "95127",
       context: "95, Val-d'Oise, Île-de-France",
+      projected: { x: 631468.28, y: 6881710.34 },
     }]);
     expect(fake.urls).toEqual([`${DEFAULT_BASE_URL}/search/?q=8+bd+du+port`]);
   });
@@ -79,7 +82,7 @@ describe("search", function searchTests() {
   });
 
   it("fills missing properties with neutral values", async function missingProperties() {
-    const fake = buildFakeFetch({ features: [{ geometry: { coordinates: [1, 2] }, properties: { city: 42 } }] });
+    const fake = buildFakeFetch({ features: [{ geometry: { coordinates: [1, 2] }, properties: { city: 42, x: 631468.28, y: "6881710.34" } }] });
     const addresses = await createGeocoder({ fetch: fake.fetch }).search("abc");
     expect(addresses).toEqual([{ id: "", label: "", score: 0, type: "housenumber", coordinates: { lat: 2, lon: 1 } }]);
   });

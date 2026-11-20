@@ -4,6 +4,12 @@ export interface Coordinates {
   lon: number;
 }
 
+/** A point in Lambert 93 (EPSG:2154), in meters, as used by French GIS data. */
+export interface ProjectedCoordinates {
+  x: number;
+  y: number;
+}
+
 /** The kinds of result the BAN API can return. */
 export type AddressType = "housenumber" | "street" | "locality" | "municipality";
 
@@ -20,6 +26,8 @@ export interface Address {
   city?: string;
   citycode?: string;
   context?: string;
+  /** The Lambert 93 (EPSG:2154) coordinates, when the service gives them. */
+  projected?: ProjectedCoordinates;
 }
 
 /** The options of a search. */
