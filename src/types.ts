@@ -40,14 +40,26 @@ export interface ReverseOptions {
   signal?: AbortSignal;
 }
 
+/** The part of a `fetch` answer this library reads; `headers` is only needed for the `Retry-After` header. */
+export interface FetchResponse {
+  ok: boolean;
+  status: number;
+  headers?: { get(name: string): string | null };
+  json(): Promise<unknown>;
+}
+
 /** The function used to call the API; the global `fetch` by default. */
-export type FetchFunction = (input: string, init?: { signal?: AbortSignal }) => Promise<{ ok: boolean; status: number; json(): Promise<unknown> }>;
+export type FetchFunction = (input: string, init?: { signal?: AbortSignal }) => Promise<FetchResponse>;
 
 /** The options of a geocoder. */
 export interface GeocoderOptions {
   baseUrl?: string;
   fetch?: FetchFunction;
   timeoutMs?: number;
+  /** How many times a 429 or 503 answer is tried again; 0 (no retry) by default. */
+  retries?: number;
+  /** The first pause before a retry, doubled at each new try, unless the answer has a `Retry-After` header; 500 ms by default. */
+  retryDelayMs?: number;
 }
 
 /**

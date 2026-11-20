@@ -55,6 +55,8 @@ async function suggest(text: string) {
 | `baseUrl` | `createGeocoder` | another BAN-compatible service, for example your own Addok |
 | `timeoutMs` | `createGeocoder` | time limit of each call, 5000 ms by default |
 | `fetch` | `createGeocoder` | your own `fetch` (tests, proxies) |
+| `retries` | `createGeocoder` | how many times a `429` or `503` answer is tried again, 0 by default (for example 3) |
+| `retryDelayMs` | `createGeocoder` | first pause before a retry, doubled at each try, 500 ms by default; a `Retry-After` header wins |
 | `limit`, `type` | `search`, `reverse` | number of results; `housenumber`, `street`, `locality` or `municipality` |
 | `autocomplete`, `postcode`, `citycode`, `near` | `search` | prefix search, filters, and a point that favours nearby results |
 | `signal` | `search`, `reverse` | cancels the call |
