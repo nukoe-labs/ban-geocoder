@@ -23,7 +23,8 @@
     "changelog": "git-cliff --output CHANGELOG.md",
     "version": "git-cliff --tag v$npm_package_version --output CHANGELOG.md && git add CHANGELOG.md",
     "test:integration": "vitest run --config vitest.integration.config.ts",
-    "docs": "typedoc"
+    "docs": "typedoc",
+    "prepublishOnly": "npm run build"
   },
   "keywords": [
     "geocoding",
