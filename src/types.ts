@@ -50,6 +50,12 @@ export interface GeocoderOptions {
   timeoutMs?: number;
 }
 
+/**
+ * The kind of a `GeocodingError`: the time limit ran out (`timeout`), the caller aborted (`aborted`),
+ * the network failed (`network`), the service answered an HTTP error (`http`), or its answer is unreadable (`format`).
+ */
+export type GeocodingErrorCode = "timeout" | "aborted" | "network" | "http" | "format";
+
 /** A BAN GeoJSON feature, reduced to the fields this library reads. */
 export interface BanFeature {
   geometry: { coordinates: [number, number] };

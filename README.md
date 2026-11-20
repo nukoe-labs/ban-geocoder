@@ -59,7 +59,16 @@ async function suggest(text: string) {
 | `autocomplete`, `postcode`, `citycode`, `near` | `search` | prefix search, filters, and a point that favours nearby results |
 | `signal` | `search`, `reverse` | cancels the call |
 
-Errors from the network or the service are thrown as `GeocodingError`, with the HTTP `status` when there is one.
+Errors from the network or the service are thrown as `GeocodingError`, with the HTTP `status` when there is one,
+and a `code` that tells them apart:
+
+| `code` | Cause |
+|---|---|
+| `timeout` | the time limit (`timeoutMs`) ran out |
+| `aborted` | your `signal` cancelled the call |
+| `network` | the service could not be reached |
+| `http` | the service answered an HTTP error (see `status`) |
+| `format` | the answer is not JSON, or not a GeoJSON feature collection |
 
 ## Development
 

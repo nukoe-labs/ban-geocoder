@@ -1,6 +1,6 @@
-import type { Address, AddressType, BanFeature, Coordinates, FetchFunction, GeocoderOptions, ReverseOptions, SearchOptions } from "./types.js";
+import type { Address, AddressType, BanFeature, Coordinates, FetchFunction, GeocoderOptions, GeocodingErrorCode, ReverseOptions, SearchOptions } from "./types.js";
 
-export type { Address, AddressType, Coordinates, FetchFunction, GeocoderOptions, ReverseOptions, SearchOptions } from "./types.js";
+export type { Address, AddressType, Coordinates, FetchFunction, GeocoderOptions, GeocodingErrorCode, ReverseOptions, SearchOptions } from "./types.js";
 
 /** The public BAN geocoding service run by IGN. */
 export const DEFAULT_BASE_URL = "https://data.geopf.fr/geocodage";
@@ -13,14 +13,27 @@ const OPTIONAL_TEXT_FIELDS = ["housenumber", "street", "postcode", "city", "city
 
 /** The error thrown when the API cannot be reached, answers an error, or answers something unreadable. */
 export class GeocodingError extends Error {
+  readonly code: GeocodingErrorCode;
   readonly status: number | undefined;
 
-  /** Builds the error with its message and, when the API answered, its HTTP status. */
-  constructor(message: string, status?: number) {
+  /** Builds the error with its message, its kind and, when the API answered, its HTTP status. */
+  constructor(message: string, code: GeocodingErrorCode, status?: number) {
     super(message);
     this.name = "GeocodingError";
+    this.code = code;
     this.status = status;
   }
+}
+
+/** Tells why the request did not reach the service: its own time limit, the caller's signal, or the network. */
+function readFetchFailureCode(timeoutSignal: AbortSignal, callerSignal: AbortSignal | undefined): GeocodingErrorCode {
+  if (timeoutSignal.aborted) {
+    return "timeout";
+  }
+  if (callerSignal?.aborted === true) {
+    return "aborted";
+  }
+  return "network";
 }
 
 /** Checks that a search text has the length the BAN API accepts, once trimmed. */
@@ -110,7 +123,7 @@ function copyTextField(address: Address, properties: Record<string, unknown>, fi
 function readFeatures(body: unknown): BanFeature[] {
   const features = (body as { features?: unknown } | null)?.features;
   if (!Array.isArray(features)) {
-    throw new GeocodingError("The geocoding service answered without a list of features.");
+    throw new GeocodingError("The geocoding service answered without a list of features.", "format");
   }
   return features as BanFeature[];
 }
@@ -123,12 +136,22 @@ async function callApi(url: string, fetchFunction: FetchFunction, timeoutMs: num
   try {
     response = await fetchFunction(url, { signal: combinedSignal });
   } catch (error) {
-    throw new GeocodingError(`The geocoding service could not be reached: ${(error as Error).message}`);
+    const code = readFetchFailureCode(timeoutSignal, signal);
+    throw new GeocodingError(`The geocoding service could not be reached: ${(error as Error).message}`, code);
   }
   if (!response.ok) {
-    throw new GeocodingError(`The geocoding service answered with HTTP ${response.status}.`, response.status);
+    throw new GeocodingError(`The geocoding service answered with HTTP ${response.status}.`, "http", response.status);
   }
-  return response.json();
+  return readJson(response);
+}
+
+/** Decodes the JSON body of an answer, and reports a body that is not JSON as a format error. */
+async function readJson(response: { json(): Promise<unknown> }): Promise<unknown> {
+  try {
+    return await response.json();
+  } catch (error) {
+    throw new GeocodingError(`The geocoding service answered something that is not JSON: ${(error as Error).message}`, "format");
+  }
 }
 
 /** A geocoder bound to one BAN-compatible service (the IGN service, or your own Addok). */
