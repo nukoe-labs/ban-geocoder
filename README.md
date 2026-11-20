@@ -39,6 +39,17 @@ const [nearest] = await geocoder.reverse({ lat: 48.8584, lon: 2.2945 }, { limit:
 // nearest.label    -> "Avenue Anatole France 75007 Paris"
 ```
 
+### Helpers
+
+```ts
+import { isHouseNumber } from "ban-geocoder";
+
+if (isHouseNumber(best)) {
+  best.housenumber; // string, no longer string | undefined
+  best.street;      // string
+}
+```
+
 ### Attribution and licence
 
 `searchWithMeta` and `reverseWithMeta` return the addresses with the metadata of the answer, when the service gives it,
