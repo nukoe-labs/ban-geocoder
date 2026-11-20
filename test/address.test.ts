@@ -1,5 +1,5 @@
 import { describe, expect, expectTypeOf, it } from "vitest";
-import { isHouseNumber } from "../src/index.js";
+import { isHouseNumber, toPostalLines } from "../src/index.js";
 import type { Address } from "../src/index.js";
 
 const HOUSE_NUMBER: Address = {
@@ -41,5 +41,23 @@ describe("isHouseNumber", function isHouseNumberTests() {
     expect(isHouseNumber({ ...HOUSE_NUMBER, street: undefined } as unknown as Address)).toBe(false);
     const withoutNumber: Address = { ...STREET, type: "housenumber" };
     expect(isHouseNumber(withoutNumber)).toBe(false);
+  });
+});
+
+describe("toPostalLines", function toPostalLinesTests() {
+  it("gives the number and street, then the postcode and city in capitals", function houseNumberLines() {
+    expect(toPostalLines(HOUSE_NUMBER)).toEqual(["8 Boulevard du Port", "95000 CERGY"]);
+  });
+
+  it("keeps the accents of the city in capitals", function accentedCity() {
+    const address: Address = { ...STREET, street: "Rue de la Gare", postcode: "77300", city: "Fontainebleau-Évry" };
+    expect(toPostalLines(address)).toEqual(["Rue de la Gare", "77300 FONTAINEBLEAU-ÉVRY"]);
+  });
+
+  it("leaves out a line without any of its parts", function missingParts() {
+    const municipality: Address = { id: "95127", label: "Cergy", score: 0.9, type: "municipality", coordinates: { lat: 49.03, lon: 2.06 }, city: "Cergy" };
+    expect(toPostalLines(municipality)).toEqual(["CERGY"]);
+    const bare: Address = { id: "", label: "", score: 0, type: "street", coordinates: { lat: 0, lon: 0 }, street: " " };
+    expect(toPostalLines(bare)).toEqual([]);
   });
 });
