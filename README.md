@@ -155,6 +155,40 @@ pin a commit or a tag instead of `main` in production.
 The complete page is in [`examples/browser/index.html`](examples/browser/index.html). The IGN service allows calls
 from any origin (CORS).
 
+### React hook
+
+[`examples/react/useAddressSearch.ts`](examples/react/useAddressSearch.ts) is a hook built on the `signal` option:
+each new text aborts the request of the previous one, so an old answer never replaces a newer one.
+
+```tsx
+/** Shows one suggested address. */
+function toListItem(address: Address) {
+  return <li key={address.id}>{address.label}</li>;
+}
+
+/** An address field with its suggestions. */
+function AddressField() {
+  const [text, setText] = useState("");
+  const { addresses, error } = useAddressSearch(text);
+
+  /** Keeps the typed text. */
+  function keepText(event: React.ChangeEvent<HTMLInputElement>): void {
+    setText(event.target.value);
+  }
+
+  return (
+    <>
+      <input value={text} onChange={keepText} />
+      {error !== undefined && <p role="alert">{error.message}</p>}
+      <ul>{addresses.map(toListItem)}</ul>
+    </>
+  );
+}
+```
+
+The library uses `AbortSignal.any`, available in browsers since 2024 and in Node.js 20.3; to test such a hook,
+use an environment that has it (happy-dom does, jsdom 25 does not).
+
 ### Options
 
 | Option | Where | Effect |
