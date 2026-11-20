@@ -1,15 +1,17 @@
 import { GeocodingError } from "./errors.js";
 import { createLruCache } from "./cache.js";
 import { createApiCaller } from "./http.js";
-import type { Address, AddressType, AnswerMetadata, BanFeature, GeocodingResult, Coordinates, GeocoderOptions, ReverseOptions, SearchOptions } from "./types.js";
+import { toParcel, toPointOfInterest } from "./places.js";
+import { readNumber, readText } from "./properties.js";
+import type { Address, AddressType, AnswerMetadata, BanFeature, GeocodingResult, Coordinates, GeocoderOptions, Parcel, ParcelSearchOptions, PointOfInterest, PointOfInterestSearchOptions, ReverseOptions, SearchIndex, SearchOptions } from "./types.js";
 
 export { distanceTo, isHouseNumber, toPostalLines } from "./address.js";
 export { createAutocomplete } from "./autocomplete.js";
-export type { Autocomplete, AutocompleteOptions } from "./autocomplete.js";
+export type { AddressSearcher, Autocomplete, AutocompleteOptions } from "./autocomplete.js";
 export type { HouseNumberAddress } from "./address.js";
 export { GeocodingError } from "./errors.js";
 
-export type { Address, AddressType, AnswerMetadata, CacheOptions, GeocodingResult, Coordinates, ProjectedCoordinates, FetchFunction, FetchResponse, GeocoderOptions, GeocodingErrorCode, ReverseOptions, SearchOptions } from "./types.js";
+export type { Address, AddressType, AnswerMetadata, CacheOptions, GeocodingResult, Coordinates, ProjectedCoordinates, FetchFunction, FetchResponse, GeocoderOptions, GeocodingErrorCode, Parcel, ParcelSearchOptions, PointOfInterest, PointOfInterestSearchOptions, ReverseOptions, SearchIndex, SearchOptions } from "./types.js";
 
 /** The public BAN geocoding service run by IGN. */
 export const DEFAULT_BASE_URL = "https://data.geopf.fr/geocodage";
@@ -48,9 +50,25 @@ function addCommonParameters(parameters: URLSearchParams, options: { limit?: num
   }
 }
 
+/** The options of a search in any index. */
+type AnySearchOptions = SearchOptions | ParcelSearchOptions | PointOfInterestSearchOptions;
+
+/** The result of a search in any index. */
+type AnySearchResult = Address | Parcel | PointOfInterest;
+
+/** Turns the features of each index into its own result type. */
+const FEATURE_CONVERTERS: Record<SearchIndex, (feature: BanFeature) => AnySearchResult> = {
+  address: toAddress,
+  parcel: toParcel,
+  poi: toPointOfInterest,
+};
+
 /** Builds the query parameters of a search. */
-function buildSearchParameters(query: string, options: SearchOptions): URLSearchParams {
+function buildSearchParameters(query: string, options: Omit<SearchOptions, "index"> & { index?: SearchIndex }): URLSearchParams {
   const parameters = new URLSearchParams({ q: checkQuery(query) });
+  if (options.index !== undefined) {
+    parameters.set("index", options.index);
+  }
   addCommonParameters(parameters, options);
   if (options.autocomplete !== undefined) {
     parameters.set("autocomplete", options.autocomplete ? "1" : "0");
@@ -67,24 +85,6 @@ function buildSearchParameters(query: string, options: SearchOptions): URLSearch
     parameters.set("lon", String(options.near.lon));
   }
   return parameters;
-}
-
-/** Reads a text property of a feature, or undefined when it is missing or not a text. */
-function readText(properties: Record<string, unknown>, name: string): string | undefined {
-  const value = properties[name];
-  if (typeof value !== "string") {
-    return undefined;
-  }
-  return value;
-}
-
-/** Reads a number property of a feature, or undefined when it is missing or not a finite number. */
-function readNumber(properties: Record<string, unknown>, name: string): number | undefined {
-  const value = properties[name];
-  if (typeof value !== "number" || !Number.isFinite(value)) {
-    return undefined;
-  }
-  return value;
 }
 
 /** Copies the importance of the place onto the address when the feature has it as a number. */
@@ -195,21 +195,26 @@ function checkMinimumScore(minScore: number | undefined): void {
   }
 }
 
-/** Keeps the addresses whose score reaches the minimum score, or all of them when no minimum is given. */
-function keepScoresFrom(addresses: Address[], minScore: number | undefined): Address[] {
+/** Keeps the results whose score reaches the minimum score, or all of them when no minimum is given. */
+function keepScoresFrom<Result extends { score: number }>(results: Result[], minScore: number | undefined): Result[] {
   if (minScore === undefined) {
-    return addresses;
+    return results;
   }
   const minimumScore = minScore;
-  /** Tells whether an address reaches the minimum score. */
-  function reachesMinimumScore(address: Address): boolean {
-    return address.score >= minimumScore;
+  /** Tells whether a result reaches the minimum score. */
+  function reachesMinimumScore(result: Result): boolean {
+    return result.score >= minimumScore;
   }
-  return addresses.filter(reachesMinimumScore);
+  return results.filter(reachesMinimumScore);
 }
 
 /** A geocoder bound to one BAN-compatible service (the IGN service, or your own Addok). */
 export interface Geocoder {
+  /** Searches cadastral parcels in the `parcel` index of the Géoplateforme. */
+  search(query: string, options: ParcelSearchOptions): Promise<Parcel[]>;
+  /** Searches points of interest in the `poi` index of the Géoplateforme. */
+  search(query: string, options: PointOfInterestSearchOptions): Promise<PointOfInterest[]>;
+  /** Searches addresses that match a text, best match first. */
   search(query: string, options?: SearchOptions): Promise<Address[]>;
   reverse(point: Coordinates, options?: ReverseOptions): Promise<Address[]>;
   /** Searches like `search`, and also returns the query, attribution and licence of the answer. */
@@ -223,11 +228,16 @@ export function createGeocoder(options: GeocoderOptions = {}): Geocoder {
   const baseUrl = (options.baseUrl ?? DEFAULT_BASE_URL).replace(/\/+$/, "");
   const readAnswerOfUrl = createAnswerReader(options);
 
-  /** Searches addresses that match a text, best match first, with the metadata of the answer. */
-  async function searchWithMeta(query: string, searchOptions: SearchOptions = {}): Promise<GeocodingResult> {
+  /** Calls the search of the service with the options of any index, and checks the minimum score first. */
+  async function readSearchAnswer(query: string, searchOptions: AnySearchOptions): Promise<BanAnswer> {
     const parameters = buildSearchParameters(query, searchOptions);
     checkMinimumScore(searchOptions.minScore);
-    const answer = await readAnswerOfUrl(`${baseUrl}/search/?${parameters}`, searchOptions.signal);
+    return readAnswerOfUrl(`${baseUrl}/search/?${parameters}`, searchOptions.signal);
+  }
+
+  /** Searches addresses that match a text, best match first, with the metadata of the answer. */
+  async function searchWithMeta(query: string, searchOptions: SearchOptions = {}): Promise<GeocodingResult> {
+    const answer = await readSearchAnswer(query, searchOptions);
     const addresses = keepScoresFrom(answer.features.map(toAddress), searchOptions.minScore);
     return { addresses, ...answer.metadata };
   }
@@ -241,10 +251,11 @@ export function createGeocoder(options: GeocoderOptions = {}): Geocoder {
     return { addresses: answer.features.map(toAddress), ...answer.metadata };
   }
 
-  /** Searches addresses that match a text, best match first. */
-  async function search(query: string, searchOptions: SearchOptions = {}): Promise<Address[]> {
-    const result = await searchWithMeta(query, searchOptions);
-    return result.addresses;
+  /** Searches the index chosen in the options (addresses by default), best match first. */
+  async function searchAnyIndex(query: string, searchOptions: AnySearchOptions = {}): Promise<AnySearchResult[]> {
+    const answer = await readSearchAnswer(query, searchOptions);
+    const convertFeature = FEATURE_CONVERTERS[searchOptions.index ?? "address"];
+    return keepScoresFrom(answer.features.map(convertFeature), searchOptions.minScore);
   }
 
   /** Finds the addresses closest to a point, closest first. */
@@ -253,5 +264,6 @@ export function createGeocoder(options: GeocoderOptions = {}): Geocoder {
     return result.addresses;
   }
 
+  const search = searchAnyIndex as Geocoder["search"];
   return { search, reverse, searchWithMeta, reverseWithMeta };
 }

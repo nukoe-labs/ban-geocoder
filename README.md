@@ -39,6 +39,20 @@ const [nearest] = await geocoder.reverse({ lat: 48.8584, lon: 2.2945 }, { limit:
 // nearest.label    -> "Avenue Anatole France 75007 Paris"
 ```
 
+### Parcels and points of interest (Géoplateforme)
+
+The IGN service also searches cadastral parcels and points of interest, each with its own result type:
+
+```ts
+const [parcel] = await geocoder.search("95127000BA0187", { index: "parcel", limit: 1 });
+// parcel.section -> "BA", parcel.number -> "0187", parcel.city -> "Cergy"
+
+const [place] = await geocoder.search("cergy", { index: "poi", limit: 1 });
+// place.toponym -> "Cergy", place.categories -> ["administratif", "commune"]
+```
+
+A self-hosted Addok only has addresses: leave `index` out (it defaults to `address`).
+
 ### Helpers
 
 ```ts
