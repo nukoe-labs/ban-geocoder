@@ -34,6 +34,18 @@ export interface Address {
   projected?: ProjectedCoordinates;
 }
 
+/** The metadata of an answer, when the service gives it: the query it understood, and the attribution and licence to display. */
+export interface AnswerMetadata {
+  query?: string;
+  attribution?: string;
+  licence?: string;
+}
+
+/** The addresses of an answer with its metadata. */
+export interface GeocodingResult extends AnswerMetadata {
+  addresses: Address[];
+}
+
 /** The options of a search. */
 export interface SearchOptions {
   limit?: number;

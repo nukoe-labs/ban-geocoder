@@ -123,6 +123,22 @@ describe("search", function searchTests() {
   });
 });
 
+describe("metadata", function metadataTests() {
+  it("returns the query, attribution and licence with the addresses", async function searchMetadata() {
+    const fake = buildFakeFetch({ type: "FeatureCollection", features: [CERGY_FEATURE], attribution: "BAN", licence: "ETALAB-2.0", query: "8 bd du port cergy", limit: 1 });
+    const result = await createGeocoder({ fetch: fake.fetch }).searchWithMeta("8 bd du port cergy", { limit: 1 });
+    expect(result).toMatchObject({ query: "8 bd du port cergy", attribution: "BAN", licence: "ETALAB-2.0" });
+    expect(result.addresses.map(readLabel)).toEqual(["8 Boulevard du Port 95000 Cergy"]);
+  });
+
+  it("leaves out the metadata the service does not give", async function missingMetadata() {
+    const fake = buildFakeFetch({ features: [CERGY_FEATURE], attribution: 42 });
+    const result = await createGeocoder({ fetch: fake.fetch }).reverseWithMeta({ lat: 49.0316, lon: 2.0628 });
+    expect(Object.keys(result)).toEqual(["addresses"]);
+    expect(result.addresses).toHaveLength(1);
+  });
+});
+
 describe("reverse", function reverseTests() {
   it("finds the address of a point", async function findsAddress() {
     const fake = buildFakeFetch({ features: [CERGY_FEATURE] });

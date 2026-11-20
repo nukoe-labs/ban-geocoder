@@ -1,11 +1,11 @@
 import { GeocodingError } from "./errors.js";
 import { createLruCache } from "./cache.js";
 import { createApiCaller } from "./http.js";
-import type { Address, AddressType, BanFeature, Coordinates, GeocoderOptions, ReverseOptions, SearchOptions } from "./types.js";
+import type { Address, AddressType, AnswerMetadata, BanFeature, GeocodingResult, Coordinates, GeocoderOptions, ReverseOptions, SearchOptions } from "./types.js";
 
 export { GeocodingError } from "./errors.js";
 
-export type { Address, AddressType, CacheOptions, Coordinates, ProjectedCoordinates, FetchFunction, FetchResponse, GeocoderOptions, GeocodingErrorCode, ReverseOptions, SearchOptions } from "./types.js";
+export type { Address, AddressType, AnswerMetadata, CacheOptions, GeocodingResult, Coordinates, ProjectedCoordinates, FetchFunction, FetchResponse, GeocoderOptions, GeocodingErrorCode, ReverseOptions, SearchOptions } from "./types.js";
 
 /** The public BAN geocoding service run by IGN. */
 export const DEFAULT_BASE_URL = "https://data.geopf.fr/geocodage";
@@ -13,6 +13,7 @@ const MINIMUM_QUERY_LENGTH = 3;
 const MAXIMUM_QUERY_LENGTH = 200;
 const MAXIMUM_LATITUDE = 90;
 const MAXIMUM_LONGITUDE = 180;
+const METADATA_FIELDS = ["query", "attribution", "licence"] as const;
 const OPTIONAL_TEXT_FIELDS = ["name", "housenumber", "street", "postcode", "city", "citycode", "context"] as const;
 
 /** Checks that a search text has the length the BAN API accepts, once trimmed. */
@@ -136,26 +137,51 @@ function readFeatures(body: unknown): BanFeature[] {
   return features as BanFeature[];
 }
 
-/** The function that gives the features the service answers for a URL. */
-type FeatureReader = (url: string, signal: AbortSignal | undefined) => Promise<BanFeature[]>;
+/** The features of an answer with its metadata. */
+interface BanAnswer {
+  features: BanFeature[];
+  metadata: AnswerMetadata;
+}
 
-/** Builds the function that gets the features of a URL, from the cache when one is set and still holds them. */
-function createFeatureReader(options: GeocoderOptions): FeatureReader {
+/** Reads the query, the attribution and the licence of an answer, when the service gives them as texts. */
+function readMetadata(body: unknown): AnswerMetadata {
+  const properties = body as Record<string, unknown>;
+  const metadata: AnswerMetadata = {};
+  for (const field of METADATA_FIELDS) {
+    copyMetadataField(metadata, properties, field);
+  }
+  return metadata;
+}
+
+/** Copies one metadata text of the answer when the service gives it. */
+function copyMetadataField(metadata: AnswerMetadata, properties: Record<string, unknown>, field: (typeof METADATA_FIELDS)[number]): void {
+  const value = readText(properties, field);
+  if (value !== undefined) {
+    metadata[field] = value;
+  }
+}
+
+/** The function that gives the answer of the service for a URL. */
+type AnswerReader = (url: string, signal: AbortSignal | undefined) => Promise<BanAnswer>;
+
+/** Builds the function that gets the answer of a URL, from the cache when one is set and still holds it. */
+function createAnswerReader(options: GeocoderOptions): AnswerReader {
   const callApi = createApiCaller(options);
-  const cache = options.cache === undefined ? undefined : createLruCache<BanFeature[]>(options.cache);
+  const cache = options.cache === undefined ? undefined : createLruCache<BanAnswer>(options.cache);
 
-  /** Calls the API for a URL, or reuses the features of the same URL kept in the cache. */
-  async function readFeaturesOfUrl(url: string, signal: AbortSignal | undefined): Promise<BanFeature[]> {
-    const cachedFeatures = cache?.get(url);
-    if (cachedFeatures !== undefined) {
-      return cachedFeatures;
+  /** Calls the API for a URL, or reuses the answer of the same URL kept in the cache. */
+  async function readAnswerOfUrl(url: string, signal: AbortSignal | undefined): Promise<BanAnswer> {
+    const cachedAnswer = cache?.get(url);
+    if (cachedAnswer !== undefined) {
+      return cachedAnswer;
     }
-    const features = readFeatures(await callApi(url, signal));
-    cache?.set(url, features);
-    return features;
+    const body = await callApi(url, signal);
+    const answer = { features: readFeatures(body), metadata: readMetadata(body) };
+    cache?.set(url, answer);
+    return answer;
   }
 
-  return readFeaturesOfUrl;
+  return readAnswerOfUrl;
 }
 
 /** Checks that a minimum score, when given, is a finite number. */
@@ -182,30 +208,46 @@ function keepScoresFrom(addresses: Address[], minScore: number | undefined): Add
 export interface Geocoder {
   search(query: string, options?: SearchOptions): Promise<Address[]>;
   reverse(point: Coordinates, options?: ReverseOptions): Promise<Address[]>;
+  /** Searches like `search`, and also returns the query, attribution and licence of the answer. */
+  searchWithMeta(query: string, options?: SearchOptions): Promise<GeocodingResult>;
+  /** Finds addresses like `reverse`, and also returns the attribution and licence of the answer. */
+  reverseWithMeta(point: Coordinates, options?: ReverseOptions): Promise<GeocodingResult>;
 }
 
 /** Creates a geocoder for the given BAN-compatible service, with a time limit on every call. */
 export function createGeocoder(options: GeocoderOptions = {}): Geocoder {
   const baseUrl = (options.baseUrl ?? DEFAULT_BASE_URL).replace(/\/+$/, "");
-  const readFeaturesOfUrl = createFeatureReader(options);
+  const readAnswerOfUrl = createAnswerReader(options);
+
+  /** Searches addresses that match a text, best match first, with the metadata of the answer. */
+  async function searchWithMeta(query: string, searchOptions: SearchOptions = {}): Promise<GeocodingResult> {
+    const parameters = buildSearchParameters(query, searchOptions);
+    checkMinimumScore(searchOptions.minScore);
+    const answer = await readAnswerOfUrl(`${baseUrl}/search/?${parameters}`, searchOptions.signal);
+    const addresses = keepScoresFrom(answer.features.map(toAddress), searchOptions.minScore);
+    return { addresses, ...answer.metadata };
+  }
+
+  /** Finds the addresses closest to a point, closest first, with the metadata of the answer. */
+  async function reverseWithMeta(point: Coordinates, reverseOptions: ReverseOptions = {}): Promise<GeocodingResult> {
+    checkCoordinates(point);
+    const parameters = new URLSearchParams({ lat: String(point.lat), lon: String(point.lon) });
+    addCommonParameters(parameters, reverseOptions);
+    const answer = await readAnswerOfUrl(`${baseUrl}/reverse/?${parameters}`, reverseOptions.signal);
+    return { addresses: answer.features.map(toAddress), ...answer.metadata };
+  }
 
   /** Searches addresses that match a text, best match first. */
   async function search(query: string, searchOptions: SearchOptions = {}): Promise<Address[]> {
-    const parameters = buildSearchParameters(query, searchOptions);
-    checkMinimumScore(searchOptions.minScore);
-    const features = await readFeaturesOfUrl(`${baseUrl}/search/?${parameters}`, searchOptions.signal);
-    const addresses = features.map(toAddress);
-    return keepScoresFrom(addresses, searchOptions.minScore);
+    const result = await searchWithMeta(query, searchOptions);
+    return result.addresses;
   }
 
   /** Finds the addresses closest to a point, closest first. */
   async function reverse(point: Coordinates, reverseOptions: ReverseOptions = {}): Promise<Address[]> {
-    checkCoordinates(point);
-    const parameters = new URLSearchParams({ lat: String(point.lat), lon: String(point.lon) });
-    addCommonParameters(parameters, reverseOptions);
-    const features = await readFeaturesOfUrl(`${baseUrl}/reverse/?${parameters}`, reverseOptions.signal);
-    return features.map(toAddress);
+    const result = await reverseWithMeta(point, reverseOptions);
+    return result.addresses;
   }
 
-  return { search, reverse };
+  return { search, reverse, searchWithMeta, reverseWithMeta };
 }

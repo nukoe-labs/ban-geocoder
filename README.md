@@ -39,6 +39,18 @@ const [nearest] = await geocoder.reverse({ lat: 48.8584, lon: 2.2945 }, { limit:
 // nearest.label    -> "Avenue Anatole France 75007 Paris"
 ```
 
+### Attribution and licence
+
+`searchWithMeta` and `reverseWithMeta` return the addresses with the metadata of the answer, when the service gives it,
+so an app can display the attribution:
+
+```ts
+const result = await geocoder.searchWithMeta("8 bd du port cergy");
+// result.addresses   -> the same addresses as search()
+// result.query       -> "8 bd du port cergy"
+// result.attribution -> "BAN", result.licence -> "ETALAB-2.0" (an Addok server gives them; the Géoplateforme only gives query)
+```
+
 ### Autocompletion that cancels the previous request
 
 ```ts
