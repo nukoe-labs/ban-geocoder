@@ -51,6 +51,14 @@ export interface FetchResponse {
 /** The function used to call the API; the global `fetch` by default. */
 export type FetchFunction = (input: string, init?: { signal?: AbortSignal }) => Promise<FetchResponse>;
 
+/** The size and the time to live of the optional in-memory cache of a geocoder. */
+export interface CacheOptions {
+  /** The number of answers kept; the least recently used one is forgotten first. */
+  size: number;
+  /** How long an answer is reused, in milliseconds. */
+  ttlMs: number;
+}
+
 /** The options of a geocoder. */
 export interface GeocoderOptions {
   baseUrl?: string;
@@ -62,6 +70,8 @@ export interface GeocoderOptions {
   retryDelayMs?: number;
   /** Spaces the requests of this geocoder evenly so that at most this number leave each second; no limit by default. */
   maxRequestsPerSecond?: number;
+  /** Keeps the answers in memory, keyed by URL, so a repeated query does not call the service again; no cache by default. */
+  cache?: CacheOptions;
 }
 
 /**

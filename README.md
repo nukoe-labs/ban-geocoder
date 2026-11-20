@@ -58,6 +58,7 @@ async function suggest(text: string) {
 | `retries` | `createGeocoder` | how many times a `429` or `503` answer is tried again, 0 by default (for example 3) |
 | `retryDelayMs` | `createGeocoder` | first pause before a retry, doubled at each try, 500 ms by default; a `Retry-After` header wins |
 | `maxRequestsPerSecond` | `createGeocoder` | spaces the requests evenly to stay under the service limit, for batch jobs; no limit by default |
+| `cache` | `createGeocoder` | `{ size, ttlMs }`: keeps that many answers in memory for that long, keyed by URL (autocompletion repeats the same prefixes); no cache by default |
 | `limit`, `type` | `search`, `reverse` | number of results; `housenumber`, `street`, `locality` or `municipality` |
 | `autocomplete`, `postcode`, `citycode`, `near` | `search` | prefix search, filters, and a point that favours nearby results |
 | `signal` | `search`, `reverse` | cancels the call |
