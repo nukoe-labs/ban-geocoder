@@ -67,15 +67,25 @@ const result = await geocoder.searchWithMeta("8 bd du port cergy");
 
 ### Autocompletion that cancels the previous request
 
-```ts
-let controller = new AbortController();
+`createAutocomplete` waits until the user stops typing for `delayMs`, then searches with `autocomplete: true`
+and cancels the request of the previous keystroke. A keystroke replaced by a newer one resolves `undefined`.
 
-async function suggest(text: string) {
-  controller.abort();
-  controller = new AbortController();
-  return geocoder.search(text, { autocomplete: true, limit: 5, signal: controller.signal });
-}
+```ts
+import { createAutocomplete } from "ban-geocoder";
+
+const autocomplete = createAutocomplete(geocoder, { delayMs: 250, limit: 5 });
+
+input.addEventListener("input", async function showSuggestions() {
+  const addresses = await autocomplete.suggest(input.value);
+  if (addresses !== undefined) {
+    render(addresses);
+  }
+});
+// autocomplete.cancel() stops the waiting keystroke and the request in progress.
 ```
+
+Any other search option (`limit`, `type`, `near`…) is passed to each search. A text shorter than 3 characters is refused
+with a `RangeError`, as with `search`.
 
 ### Options
 
