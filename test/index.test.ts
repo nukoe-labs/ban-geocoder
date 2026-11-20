@@ -13,6 +13,7 @@ const CERGY_FEATURE = {
     name: "8 Boulevard du Port",
     postcode: "95000",
     citycode: "95127",
+    importance: 0.67985,
     x: 631468.28,
     y: 6881710.34,
     city: "Cergy",
@@ -57,6 +58,8 @@ describe("search", function searchTests() {
       score: 0.49,
       type: "housenumber",
       coordinates: { lat: 49.031624, lon: 2.062821 },
+      name: "8 Boulevard du Port",
+      importance: 0.67985,
       housenumber: "8",
       street: "Boulevard du Port",
       postcode: "95000",
@@ -82,7 +85,7 @@ describe("search", function searchTests() {
   });
 
   it("fills missing properties with neutral values", async function missingProperties() {
-    const fake = buildFakeFetch({ features: [{ geometry: { coordinates: [1, 2] }, properties: { city: 42, x: 631468.28, y: "6881710.34" } }] });
+    const fake = buildFakeFetch({ features: [{ geometry: { coordinates: [1, 2] }, properties: { city: 42, importance: "high", x: 631468.28, y: "6881710.34" } }] });
     const addresses = await createGeocoder({ fetch: fake.fetch }).search("abc");
     expect(addresses).toEqual([{ id: "", label: "", score: 0, type: "housenumber", coordinates: { lat: 2, lon: 1 } }]);
   });

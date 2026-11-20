@@ -20,6 +20,10 @@ export interface Address {
   score: number;
   type: AddressType;
   coordinates: Coordinates;
+  /** The address without the postcode and the city, for example "8 Boulevard du Port". */
+  name?: string;
+  /** The importance of the place given by the service, between 0 and 1, useful for ranking. */
+  importance?: number;
   housenumber?: string;
   street?: string;
   postcode?: string;
