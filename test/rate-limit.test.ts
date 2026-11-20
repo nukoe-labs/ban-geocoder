@@ -17,26 +17,29 @@ function buildTimedFetch(): { fetch: FetchFunction; sentAt: number[] } {
   return { fetch: timedFetch, sentAt };
 }
 
-/** Gives the time between each call and the next one. */
-function readGaps(sentAt: number[]): number[] {
-  const gaps: number[] = [];
-  for (let index = 1; index < sentAt.length; index += 1) {
-    gaps.push((sentAt[index] as number) - (sentAt[index - 1] as number));
+/** Gives the time each call waited after the start, less the time its turn was booked for at the given interval. */
+function readDelaysAfterTurns(sentAt: number[], startedAt: number, intervalMs: number): number[] {
+  const delays: number[] = [];
+  for (let index = 0; index < sentAt.length; index += 1) {
+    delays.push((sentAt[index] as number) - startedAt - index * intervalMs);
   }
-  return gaps;
+  return delays;
 }
 
-/** The time between two requests at 20 requests per second, less 5 ms for the timer precision. */
-const MINIMUM_GAP_AT_20_PER_SECOND_MS = 45;
+/** The time between two requests at 20 requests per second. */
+const INTERVAL_AT_20_PER_SECOND_MS = 50;
+/** The precision of the timers: a timer may fire up to this much early. */
+const TIMER_PRECISION_MS = 5;
 
 describe("rate limit", function rateLimitTests() {
-  it("spaces the requests evenly", async function spacesRequests() {
+  it("sends each request no earlier than its turn", async function spacesRequests() {
     const fake = buildTimedFetch();
     const geocoder = createGeocoder({ fetch: fake.fetch, maxRequestsPerSecond: 20 });
+    const startedAt = Date.now();
     await Promise.all([geocoder.search("paris"), geocoder.search("lyon"), geocoder.reverse({ lat: 48, lon: 2 }), geocoder.search("lille")]);
     expect(fake.sentAt).toHaveLength(4);
-    for (const gap of readGaps(fake.sentAt)) {
-      expect(gap).toBeGreaterThanOrEqual(MINIMUM_GAP_AT_20_PER_SECOND_MS);
+    for (const delay of readDelaysAfterTurns(fake.sentAt, startedAt, INTERVAL_AT_20_PER_SECOND_MS)) {
+      expect(delay).toBeGreaterThanOrEqual(-TIMER_PRECISION_MS);
     }
   });
 
@@ -45,7 +48,7 @@ describe("rate limit", function rateLimitTests() {
     const geocoder = createGeocoder({ fetch: fake.fetch });
     const startedAt = Date.now();
     await Promise.all([geocoder.search("paris"), geocoder.search("lyon"), geocoder.search("lille")]);
-    expect(Date.now() - startedAt).toBeLessThan(MINIMUM_GAP_AT_20_PER_SECOND_MS);
+    expect(Date.now() - startedAt).toBeLessThan(INTERVAL_AT_20_PER_SECOND_MS);
   });
 
   it("refuses a limit that is not above zero", function invalidLimit() {
