@@ -1,3 +1,7 @@
+import { GeocodingError } from "./errors.js";
+import { pause } from "./pause.js";
+import { createRateLimiter } from "./rate-limit.js";
+import type { RateLimiter } from "./rate-limit.js";
 import type { FetchFunction, FetchResponse, GeocoderOptions, GeocodingErrorCode } from "./types.js";
 
 const DEFAULT_TIMEOUT_MS = 5000;
@@ -6,20 +10,6 @@ const BACKOFF_FACTOR = 2;
 const MILLISECONDS_PER_SECOND = 1000;
 const RETRYABLE_STATUSES = new Set([429, 503]);
 const RETRY_AFTER_SECONDS_PATTERN = /^\d+$/;
-
-/** The error thrown when the API cannot be reached, answers an error, or answers something unreadable. */
-export class GeocodingError extends Error {
-  readonly code: GeocodingErrorCode;
-  readonly status: number | undefined;
-
-  /** Builds the error with its message, its kind and, when the API answered, its HTTP status. */
-  constructor(message: string, code: GeocodingErrorCode, status?: number) {
-    super(message);
-    this.name = "GeocodingError";
-    this.code = code;
-    this.status = status;
-  }
-}
 
 /** The function that calls the API for a URL and returns its decoded JSON answer. */
 export type ApiCaller = (url: string, signal: AbortSignal | undefined) => Promise<unknown>;
@@ -30,15 +20,17 @@ interface ApiSettings {
   timeoutMs: number;
   retries: number;
   retryDelayMs: number;
+  waitForTurn: RateLimiter | undefined;
 }
 
-/** Builds the function that calls the API with the time limit and the retry settings of a geocoder. */
+/** Builds the function that calls the API with the time limit, the retry settings and the rate limit of a geocoder. */
 export function createApiCaller(options: GeocoderOptions): ApiCaller {
   const settings: ApiSettings = {
     fetchFunction: options.fetch ?? (globalThis.fetch as unknown as FetchFunction),
     timeoutMs: options.timeoutMs ?? DEFAULT_TIMEOUT_MS,
     retries: options.retries ?? 0,
     retryDelayMs: options.retryDelayMs ?? DEFAULT_RETRY_DELAY_MS,
+    waitForTurn: createRateLimiter(options.maxRequestsPerSecond),
   };
 
   /** Calls the API, retrying a busy answer when allowed, and returns its decoded JSON answer. */
@@ -56,7 +48,7 @@ async function fetchWithRetries(url: string, settings: ApiSettings, signal: Abor
   let response = await fetchOnce(url, settings, signal);
   while (shouldRetry(response, attempt, settings.retries)) {
     const delayMs = readRetryDelay(response, attempt, settings.retryDelayMs);
-    await waitBeforeRetry(delayMs, signal);
+    await pause(delayMs, signal, "The call was aborted while waiting to retry.");
     attempt += 1;
     response = await fetchOnce(url, settings, signal);
   }
@@ -99,26 +91,11 @@ function parseRetryAfter(retryAfter: string | null): number | undefined {
   return Math.max(0, retryDate - Date.now());
 }
 
-/** Waits before a retry, and stops at once with an `aborted` error when the caller's signal aborts. */
-function waitBeforeRetry(delayMs: number, signal: AbortSignal | undefined): Promise<void> {
-  return new Promise(function waitForDelay(resolve, reject) {
-    /** Ends the pause and stops listening to the caller's signal. */
-    function finishWaiting(): void {
-      signal?.removeEventListener("abort", stopWaiting);
-      resolve();
-    }
-    /** Cancels the pause and reports the caller's abort. */
-    function stopWaiting(): void {
-      clearTimeout(timer);
-      reject(new GeocodingError("The call was aborted while waiting to retry.", "aborted"));
-    }
-    const timer = setTimeout(finishWaiting, delayMs);
-    signal?.addEventListener("abort", stopWaiting, { once: true });
-  });
-}
-
-/** Fetches a URL once, with the time limit, and turns a failure to reach the service into a `GeocodingError`. */
+/** Fetches a URL once, in its turn under the rate limit and with the time limit, and turns a failure to reach the service into a `GeocodingError`. */
 async function fetchOnce(url: string, settings: ApiSettings, signal: AbortSignal | undefined): Promise<FetchResponse> {
+  if (settings.waitForTurn !== undefined) {
+    await settings.waitForTurn(signal);
+  }
   const timeoutSignal = AbortSignal.timeout(settings.timeoutMs);
   const combinedSignal = signal === undefined ? timeoutSignal : AbortSignal.any([signal, timeoutSignal]);
   try {

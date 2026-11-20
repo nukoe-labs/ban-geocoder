@@ -1,7 +1,8 @@
-import { createApiCaller, GeocodingError } from "./http.js";
+import { GeocodingError } from "./errors.js";
+import { createApiCaller } from "./http.js";
 import type { Address, AddressType, BanFeature, Coordinates, GeocoderOptions, ReverseOptions, SearchOptions } from "./types.js";
 
-export { GeocodingError } from "./http.js";
+export { GeocodingError } from "./errors.js";
 
 export type { Address, AddressType, Coordinates, FetchFunction, FetchResponse, GeocoderOptions, GeocodingErrorCode, ReverseOptions, SearchOptions } from "./types.js";
 
