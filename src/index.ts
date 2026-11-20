@@ -13,7 +13,7 @@ const MINIMUM_QUERY_LENGTH = 3;
 const MAXIMUM_QUERY_LENGTH = 200;
 const MAXIMUM_LATITUDE = 90;
 const MAXIMUM_LONGITUDE = 180;
-const OPTIONAL_TEXT_FIELDS = ["housenumber", "street", "postcode", "city", "citycode", "context"] as const;
+const OPTIONAL_TEXT_FIELDS = ["name", "housenumber", "street", "postcode", "city", "citycode", "context"] as const;
 
 /** Checks that a search text has the length the BAN API accepts, once trimmed. */
 function checkQuery(query: string): string {
@@ -82,6 +82,14 @@ function readNumber(properties: Record<string, unknown>, name: string): number |
   return value;
 }
 
+/** Copies the importance of the place onto the address when the feature has it as a number. */
+function copyImportance(address: Address, properties: Record<string, unknown>): void {
+  const importance = readNumber(properties, "importance");
+  if (importance !== undefined) {
+    address.importance = importance;
+  }
+}
+
 /** Copies the Lambert 93 coordinates onto the address when the feature has both `x` and `y`. */
 function copyProjectedCoordinates(address: Address, properties: Record<string, unknown>): void {
   const x = readNumber(properties, "x");
@@ -106,6 +114,7 @@ function toAddress(feature: BanFeature): Address {
   for (const field of OPTIONAL_TEXT_FIELDS) {
     copyTextField(address, properties, field);
   }
+  copyImportance(address, properties);
   copyProjectedCoordinates(address, properties);
   return address;
 }

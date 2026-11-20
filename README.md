@@ -31,6 +31,8 @@ const geocoder = createGeocoder(); // the public IGN service, https://data.geopf
 const [best] = await geocoder.search("8 bd du port cergy", { limit: 1 });
 // best.label       -> "8 Boulevard du Port 95000 Cergy"
 // best.coordinates -> { lat: 49.031624, lon: 2.062821 }
+// best.name        -> "8 Boulevard du Port" (the address without the city)
+// best.importance  -> 0.67985
 // best.projected   -> { x: 631468.28, y: 6881710.34 } (Lambert 93, EPSG:2154, when the service gives it)
 
 const [nearest] = await geocoder.reverse({ lat: 48.8584, lon: 2.2945 }, { limit: 1 });
