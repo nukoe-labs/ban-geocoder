@@ -114,10 +114,32 @@ export interface FetchResponse {
   status: number;
   headers?: { get(name: string): string | null };
   json(): Promise<unknown>;
+  /** Only needed by `searchCsv`, whose answer is a CSV text. */
+  text?(): Promise<string>;
+}
+
+/** The options this library gives to `fetch`: the signal, and for `searchCsv` the POST method and the form. */
+export interface FetchInit {
+  signal?: AbortSignal;
+  method?: "POST";
+  body?: FormData;
 }
 
 /** The function used to call the API; the global `fetch` by default. */
-export type FetchFunction = (input: string, init?: { signal?: AbortSignal }) => Promise<FetchResponse>;
+export type FetchFunction = (input: string, init?: FetchInit) => Promise<FetchResponse>;
+
+/** The options of a CSV batch geocoding. */
+export interface CsvSearchOptions {
+  /** The name of the column that holds the postcode, to narrow each search. */
+  postcode?: string;
+  /** The name of the column that holds the INSEE city code, to narrow each search. */
+  citycode?: string;
+  /** The result columns to add; all of them by default. */
+  resultColumns?: string[];
+  /** The time limit of this call, instead of the geocoder's `timeoutMs`; a large file takes longer. */
+  timeoutMs?: number;
+  signal?: AbortSignal;
+}
 
 /** The size and the time to live of the optional in-memory cache of a geocoder. */
 export interface CacheOptions {

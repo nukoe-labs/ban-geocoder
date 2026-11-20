@@ -1,9 +1,10 @@
 import { GeocodingError } from "./errors.js";
 import { createLruCache } from "./cache.js";
 import { createApiCaller } from "./http.js";
+import type { ApiClient, ApiRequest } from "./http.js";
 import { toParcel, toPointOfInterest } from "./places.js";
 import { readNumber, readText } from "./properties.js";
-import type { Address, AddressType, AnswerMetadata, BanFeature, GeocodingResult, Coordinates, GeocoderOptions, Parcel, ParcelSearchOptions, PointOfInterest, PointOfInterestSearchOptions, ReverseOptions, SearchIndex, SearchOptions } from "./types.js";
+import type { Address, AddressType, AnswerMetadata, BanFeature, CsvSearchOptions, GeocodingResult, Coordinates, GeocoderOptions, Parcel, ParcelSearchOptions, PointOfInterest, PointOfInterestSearchOptions, ReverseOptions, SearchIndex, SearchOptions } from "./types.js";
 
 export { distanceTo, isHouseNumber, toPostalLines } from "./address.js";
 export { createAutocomplete } from "./autocomplete.js";
@@ -11,7 +12,7 @@ export type { AddressSearcher, Autocomplete, AutocompleteOptions } from "./autoc
 export type { HouseNumberAddress } from "./address.js";
 export { GeocodingError } from "./errors.js";
 
-export type { Address, AddressType, AnswerMetadata, CacheOptions, GeocodingResult, Coordinates, ProjectedCoordinates, FetchFunction, FetchResponse, GeocoderOptions, GeocodingErrorCode, Parcel, ParcelSearchOptions, PointOfInterest, PointOfInterestSearchOptions, ReverseOptions, SearchIndex, SearchOptions } from "./types.js";
+export type { Address, AddressType, AnswerMetadata, CacheOptions, CsvSearchOptions, FetchInit, GeocodingResult, Coordinates, ProjectedCoordinates, FetchFunction, FetchResponse, GeocoderOptions, GeocodingErrorCode, Parcel, ParcelSearchOptions, PointOfInterest, PointOfInterestSearchOptions, ReverseOptions, SearchIndex, SearchOptions } from "./types.js";
 
 /** The public BAN geocoding service run by IGN. */
 export const DEFAULT_BASE_URL = "https://data.geopf.fr/geocodage";
@@ -19,6 +20,8 @@ const MINIMUM_QUERY_LENGTH = 3;
 const MAXIMUM_QUERY_LENGTH = 200;
 const MAXIMUM_LATITUDE = 90;
 const MAXIMUM_LONGITUDE = 180;
+/** The file name sent with a CSV file, which the service needs to read the upload. */
+const CSV_FILE_NAME = "addresses.csv";
 const METADATA_FIELDS = ["query", "attribution", "licence"] as const;
 const OPTIONAL_TEXT_FIELDS = ["name", "housenumber", "street", "postcode", "city", "citycode", "context"] as const;
 
@@ -169,8 +172,7 @@ function copyMetadataField(metadata: AnswerMetadata, properties: Record<string, 
 type AnswerReader = (url: string, signal: AbortSignal | undefined) => Promise<BanAnswer>;
 
 /** Builds the function that gets the answer of a URL, from the cache when one is set and still holds it. */
-function createAnswerReader(options: GeocoderOptions): AnswerReader {
-  const callApi = createApiCaller(options);
+function createAnswerReader(options: GeocoderOptions, api: ApiClient): AnswerReader {
   const cache = options.cache === undefined ? undefined : createLruCache<BanAnswer>(options.cache);
 
   /** Calls the API for a URL, or reuses the answer of the same URL kept in the cache. */
@@ -179,7 +181,7 @@ function createAnswerReader(options: GeocoderOptions): AnswerReader {
     if (cachedAnswer !== undefined) {
       return cachedAnswer;
     }
-    const body = await callApi(url, signal);
+    const body = await api.getJson(url, signal);
     const answer = { features: readFeatures(body), metadata: readMetadata(body) };
     cache?.set(url, answer);
     return answer;
@@ -221,12 +223,40 @@ export interface Geocoder {
   searchWithMeta(query: string, options?: SearchOptions): Promise<GeocodingResult>;
   /** Finds addresses like `reverse`, and also returns the attribution and licence of the answer. */
   reverseWithMeta(point: Coordinates, options?: ReverseOptions): Promise<GeocodingResult>;
+  /**
+   * Geocodes every line of a CSV file in one call to the `/search/csv/` endpoint, using the given columns as the address,
+   * and returns the CSV text with the result columns added.
+   */
+  searchCsv(file: Blob, columns: string[], options?: CsvSearchOptions): Promise<string>;
+}
+
+/** Builds the form of a CSV batch geocoding: the file, the address columns and the optional filter and result columns. */
+function buildCsvForm(file: Blob, columns: string[], options: CsvSearchOptions): FormData {
+  const form = new FormData();
+  form.append("data", file, CSV_FILE_NAME);
+  appendEach(form, "columns", columns);
+  appendEach(form, "result_columns", options.resultColumns ?? []);
+  if (options.postcode !== undefined) {
+    form.append("postcode", options.postcode);
+  }
+  if (options.citycode !== undefined) {
+    form.append("citycode", options.citycode);
+  }
+  return form;
+}
+
+/** Adds each value of a list to a form under the same field name. */
+function appendEach(form: FormData, name: string, values: string[]): void {
+  for (const value of values) {
+    form.append(name, value);
+  }
 }
 
 /** Creates a geocoder for the given BAN-compatible service, with a time limit on every call. */
 export function createGeocoder(options: GeocoderOptions = {}): Geocoder {
   const baseUrl = (options.baseUrl ?? DEFAULT_BASE_URL).replace(/\/+$/, "");
-  const readAnswerOfUrl = createAnswerReader(options);
+  const api = createApiCaller(options);
+  const readAnswerOfUrl = createAnswerReader(options, api);
 
   /** Calls the search of the service with the options of any index, and checks the minimum score first. */
   async function readSearchAnswer(query: string, searchOptions: AnySearchOptions): Promise<BanAnswer> {
@@ -264,6 +294,16 @@ export function createGeocoder(options: GeocoderOptions = {}): Geocoder {
     return result.addresses;
   }
 
+  /** Geocodes every line of a CSV file in one call, and returns the CSV with the result columns added. */
+  async function searchCsv(file: Blob, columns: string[], csvOptions: CsvSearchOptions = {}): Promise<string> {
+    const form = buildCsvForm(file, columns, csvOptions);
+    const request: ApiRequest = { url: `${baseUrl}/search/csv/`, signal: csvOptions.signal, form };
+    if (csvOptions.timeoutMs !== undefined) {
+      request.timeoutMs = csvOptions.timeoutMs;
+    }
+    return api.postForText(request);
+  }
+
   const search = searchAnyIndex as Geocoder["search"];
-  return { search, reverse, searchWithMeta, reverseWithMeta };
+  return { search, reverse, searchWithMeta, reverseWithMeta, searchCsv };
 }

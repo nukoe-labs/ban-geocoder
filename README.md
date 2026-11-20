@@ -53,6 +53,23 @@ const [place] = await geocoder.search("cergy", { index: "poi", limit: 1 });
 
 A self-hosted Addok only has addresses: leave `index` out (it defaults to `address`).
 
+### Thousands of addresses from a CSV file
+
+`searchCsv` sends a whole CSV file to the `/search/csv/` endpoint and returns the CSV text with the result columns added:
+
+```ts
+import { readFile } from "node:fs/promises";
+
+const file = new Blob([await readFile("addresses.csv")], { type: "text/csv" });
+const geocoded = await geocoder.searchCsv(file, ["number", "street", "city"], {
+  postcode: "postcode",                          // optional column that narrows each search
+  resultColumns: ["result_label", "result_score"], // all result columns by default
+  timeoutMs: 120_000,                            // a large file takes longer than one search
+});
+```
+
+The IGN service has this endpoint; a self-hosted Addok has it only when its CSV plugin is enabled (otherwise it answers an HTTP error).
+
 ### Helpers
 
 ```ts
