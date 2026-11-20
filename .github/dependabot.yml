@@ -1,0 +1,17 @@
+# Ce fichier demande à Dependabot de proposer chaque semaine les mises à jour des actions GitHub et des dépendances.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      actions:
+        patterns: ["*"]
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      dependances:
+        patterns: ["*"]
