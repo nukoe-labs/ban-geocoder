@@ -1,40 +1,17 @@
-import type { Address, AddressType, BanFeature, Coordinates, FetchFunction, GeocoderOptions, GeocodingErrorCode, ReverseOptions, SearchOptions } from "./types.js";
+import { createApiCaller, GeocodingError } from "./http.js";
+import type { Address, AddressType, BanFeature, Coordinates, GeocoderOptions, ReverseOptions, SearchOptions } from "./types.js";
 
-export type { Address, AddressType, Coordinates, FetchFunction, GeocoderOptions, GeocodingErrorCode, ReverseOptions, SearchOptions } from "./types.js";
+export { GeocodingError } from "./http.js";
+
+export type { Address, AddressType, Coordinates, FetchFunction, FetchResponse, GeocoderOptions, GeocodingErrorCode, ReverseOptions, SearchOptions } from "./types.js";
 
 /** The public BAN geocoding service run by IGN. */
 export const DEFAULT_BASE_URL = "https://data.geopf.fr/geocodage";
-const DEFAULT_TIMEOUT_MS = 5000;
 const MINIMUM_QUERY_LENGTH = 3;
 const MAXIMUM_QUERY_LENGTH = 200;
 const MAXIMUM_LATITUDE = 90;
 const MAXIMUM_LONGITUDE = 180;
 const OPTIONAL_TEXT_FIELDS = ["housenumber", "street", "postcode", "city", "citycode", "context"] as const;
-
-/** The error thrown when the API cannot be reached, answers an error, or answers something unreadable. */
-export class GeocodingError extends Error {
-  readonly code: GeocodingErrorCode;
-  readonly status: number | undefined;
-
-  /** Builds the error with its message, its kind and, when the API answered, its HTTP status. */
-  constructor(message: string, code: GeocodingErrorCode, status?: number) {
-    super(message);
-    this.name = "GeocodingError";
-    this.code = code;
-    this.status = status;
-  }
-}
-
-/** Tells why the request did not reach the service: its own time limit, the caller's signal, or the network. */
-function readFetchFailureCode(timeoutSignal: AbortSignal, callerSignal: AbortSignal | undefined): GeocodingErrorCode {
-  if (timeoutSignal.aborted) {
-    return "timeout";
-  }
-  if (callerSignal?.aborted === true) {
-    return "aborted";
-  }
-  return "network";
-}
 
 /** Checks that a search text has the length the BAN API accepts, once trimmed. */
 function checkQuery(query: string): string {
@@ -128,32 +105,6 @@ function readFeatures(body: unknown): BanFeature[] {
   return features as BanFeature[];
 }
 
-/** Calls the API with a time limit and returns its decoded JSON answer. */
-async function callApi(url: string, fetchFunction: FetchFunction, timeoutMs: number, signal: AbortSignal | undefined): Promise<unknown> {
-  const timeoutSignal = AbortSignal.timeout(timeoutMs);
-  const combinedSignal = signal === undefined ? timeoutSignal : AbortSignal.any([signal, timeoutSignal]);
-  let response;
-  try {
-    response = await fetchFunction(url, { signal: combinedSignal });
-  } catch (error) {
-    const code = readFetchFailureCode(timeoutSignal, signal);
-    throw new GeocodingError(`The geocoding service could not be reached: ${(error as Error).message}`, code);
-  }
-  if (!response.ok) {
-    throw new GeocodingError(`The geocoding service answered with HTTP ${response.status}.`, "http", response.status);
-  }
-  return readJson(response);
-}
-
-/** Decodes the JSON body of an answer, and reports a body that is not JSON as a format error. */
-async function readJson(response: { json(): Promise<unknown> }): Promise<unknown> {
-  try {
-    return await response.json();
-  } catch (error) {
-    throw new GeocodingError(`The geocoding service answered something that is not JSON: ${(error as Error).message}`, "format");
-  }
-}
-
 /** A geocoder bound to one BAN-compatible service (the IGN service, or your own Addok). */
 export interface Geocoder {
   search(query: string, options?: SearchOptions): Promise<Address[]>;
@@ -163,13 +114,12 @@ export interface Geocoder {
 /** Creates a geocoder for the given BAN-compatible service, with a time limit on every call. */
 export function createGeocoder(options: GeocoderOptions = {}): Geocoder {
   const baseUrl = (options.baseUrl ?? DEFAULT_BASE_URL).replace(/\/+$/, "");
-  const fetchFunction = options.fetch ?? (globalThis.fetch as unknown as FetchFunction);
-  const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+  const callApi = createApiCaller(options);
 
   /** Searches addresses that match a text, best match first. */
   async function search(query: string, searchOptions: SearchOptions = {}): Promise<Address[]> {
     const parameters = buildSearchParameters(query, searchOptions);
-    const body = await callApi(`${baseUrl}/search/?${parameters}`, fetchFunction, timeoutMs, searchOptions.signal);
+    const body = await callApi(`${baseUrl}/search/?${parameters}`, searchOptions.signal);
     return readFeatures(body).map(toAddress);
   }
 
@@ -178,7 +128,7 @@ export function createGeocoder(options: GeocoderOptions = {}): Geocoder {
     checkCoordinates(point);
     const parameters = new URLSearchParams({ lat: String(point.lat), lon: String(point.lon) });
     addCommonParameters(parameters, reverseOptions);
-    const body = await callApi(`${baseUrl}/reverse/?${parameters}`, fetchFunction, timeoutMs, reverseOptions.signal);
+    const body = await callApi(`${baseUrl}/reverse/?${parameters}`, reverseOptions.signal);
     return readFeatures(body).map(toAddress);
   }
 
