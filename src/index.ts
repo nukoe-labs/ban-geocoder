@@ -3,7 +3,7 @@ import { createLruCache } from "./cache.js";
 import { createApiCaller } from "./http.js";
 import type { Address, AddressType, AnswerMetadata, BanFeature, GeocodingResult, Coordinates, GeocoderOptions, ReverseOptions, SearchOptions } from "./types.js";
 
-export { isHouseNumber } from "./address.js";
+export { isHouseNumber, toPostalLines } from "./address.js";
 export type { HouseNumberAddress } from "./address.js";
 export { GeocodingError } from "./errors.js";
 
