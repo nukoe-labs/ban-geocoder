@@ -204,6 +204,21 @@ describe("errors", function errorTests() {
     await expect(failure).rejects.toMatchObject({ code: "network", message: "The geocoding service could not be reached: fetch failed" });
   });
 
+  it("calls fetch as a plain function, as the browser fetch requires", async function plainFetchCall() {
+    const receivedThis: unknown[] = [];
+    /** Records the `this` it is called with, which the browser fetch refuses unless it is the window or undefined. */
+    async function strictFetch(this: unknown): Promise<{ ok: boolean; status: number; json(): Promise<unknown> }> {
+      receivedThis.push(this);
+      /** Returns an empty feature collection. */
+      async function json(): Promise<unknown> {
+        return { features: [] };
+      }
+      return { ok: true, status: 200, json };
+    }
+    await createGeocoder({ fetch: strictFetch }).search("paris");
+    expect(receivedThis).toEqual([undefined]);
+  });
+
   it("uses the global fetch by default", function defaultFetch() {
     expect(typeof createGeocoder().search).toBe("function");
   });

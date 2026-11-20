@@ -117,7 +117,9 @@ async function fetchOnce(request: ApiRequest, settings: ApiSettings): Promise<Fe
   const timeoutSignal = AbortSignal.timeout(request.timeoutMs ?? settings.timeoutMs);
   const combinedSignal = signal === undefined ? timeoutSignal : AbortSignal.any([signal, timeoutSignal]);
   try {
-    return await settings.fetchFunction(request.url, buildRequestInit(request, combinedSignal));
+    // The browser fetch refuses to run with another `this` than the window, so it is called as a plain function.
+    const fetchFunction = settings.fetchFunction;
+    return await fetchFunction(request.url, buildRequestInit(request, combinedSignal));
   } catch (error) {
     const code = readFetchFailureCode(timeoutSignal, signal);
     throw new GeocodingError(`The geocoding service could not be reached: ${(error as Error).message}`, code);
