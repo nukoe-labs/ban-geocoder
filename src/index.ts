@@ -1,10 +1,11 @@
 import { GeocodingError } from "./errors.js";
+import { createLruCache } from "./cache.js";
 import { createApiCaller } from "./http.js";
 import type { Address, AddressType, BanFeature, Coordinates, GeocoderOptions, ReverseOptions, SearchOptions } from "./types.js";
 
 export { GeocodingError } from "./errors.js";
 
-export type { Address, AddressType, Coordinates, FetchFunction, FetchResponse, GeocoderOptions, GeocodingErrorCode, ReverseOptions, SearchOptions } from "./types.js";
+export type { Address, AddressType, CacheOptions, Coordinates, FetchFunction, FetchResponse, GeocoderOptions, GeocodingErrorCode, ReverseOptions, SearchOptions } from "./types.js";
 
 /** The public BAN geocoding service run by IGN. */
 export const DEFAULT_BASE_URL = "https://data.geopf.fr/geocodage";
@@ -106,6 +107,28 @@ function readFeatures(body: unknown): BanFeature[] {
   return features as BanFeature[];
 }
 
+/** The function that gives the features the service answers for a URL. */
+type FeatureReader = (url: string, signal: AbortSignal | undefined) => Promise<BanFeature[]>;
+
+/** Builds the function that gets the features of a URL, from the cache when one is set and still holds them. */
+function createFeatureReader(options: GeocoderOptions): FeatureReader {
+  const callApi = createApiCaller(options);
+  const cache = options.cache === undefined ? undefined : createLruCache<BanFeature[]>(options.cache);
+
+  /** Calls the API for a URL, or reuses the features of the same URL kept in the cache. */
+  async function readFeaturesOfUrl(url: string, signal: AbortSignal | undefined): Promise<BanFeature[]> {
+    const cachedFeatures = cache?.get(url);
+    if (cachedFeatures !== undefined) {
+      return cachedFeatures;
+    }
+    const features = readFeatures(await callApi(url, signal));
+    cache?.set(url, features);
+    return features;
+  }
+
+  return readFeaturesOfUrl;
+}
+
 /** A geocoder bound to one BAN-compatible service (the IGN service, or your own Addok). */
 export interface Geocoder {
   search(query: string, options?: SearchOptions): Promise<Address[]>;
@@ -115,13 +138,13 @@ export interface Geocoder {
 /** Creates a geocoder for the given BAN-compatible service, with a time limit on every call. */
 export function createGeocoder(options: GeocoderOptions = {}): Geocoder {
   const baseUrl = (options.baseUrl ?? DEFAULT_BASE_URL).replace(/\/+$/, "");
-  const callApi = createApiCaller(options);
+  const readFeaturesOfUrl = createFeatureReader(options);
 
   /** Searches addresses that match a text, best match first. */
   async function search(query: string, searchOptions: SearchOptions = {}): Promise<Address[]> {
     const parameters = buildSearchParameters(query, searchOptions);
-    const body = await callApi(`${baseUrl}/search/?${parameters}`, searchOptions.signal);
-    return readFeatures(body).map(toAddress);
+    const features = await readFeaturesOfUrl(`${baseUrl}/search/?${parameters}`, searchOptions.signal);
+    return features.map(toAddress);
   }
 
   /** Finds the addresses closest to a point, closest first. */
@@ -129,8 +152,8 @@ export function createGeocoder(options: GeocoderOptions = {}): Geocoder {
     checkCoordinates(point);
     const parameters = new URLSearchParams({ lat: String(point.lat), lon: String(point.lon) });
     addCommonParameters(parameters, reverseOptions);
-    const body = await callApi(`${baseUrl}/reverse/?${parameters}`, reverseOptions.signal);
-    return readFeatures(body).map(toAddress);
+    const features = await readFeaturesOfUrl(`${baseUrl}/reverse/?${parameters}`, reverseOptions.signal);
+    return features.map(toAddress);
   }
 
   return { search, reverse };
