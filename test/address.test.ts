@@ -1,5 +1,5 @@
 import { describe, expect, expectTypeOf, it } from "vitest";
-import { isHouseNumber, toPostalLines } from "../src/index.js";
+import { distanceTo, isHouseNumber, toPostalLines } from "../src/index.js";
 import type { Address } from "../src/index.js";
 
 const HOUSE_NUMBER: Address = {
@@ -59,5 +59,27 @@ describe("toPostalLines", function toPostalLinesTests() {
     expect(toPostalLines(municipality)).toEqual(["CERGY"]);
     const bare: Address = { id: "", label: "", score: 0, type: "street", coordinates: { lat: 0, lon: 0 }, street: " " };
     expect(toPostalLines(bare)).toEqual([]);
+  });
+});
+
+describe("distanceTo", function distanceToTests() {
+  it("gives zero for the same point", function samePoint() {
+    expect(distanceTo(HOUSE_NUMBER, HOUSE_NUMBER.coordinates)).toBe(0);
+  });
+
+  it("gives the distance in meters between Paris and Lyon", function parisToLyon() {
+    const notreDame: Address = { ...STREET, coordinates: { lat: 48.853, lon: 2.3499 } };
+    const lyonBellecour = { lat: 45.7578, lon: 4.832 };
+    expect(distanceTo(notreDame, lyonBellecour)).toBeCloseTo(391_870, -3);
+  });
+
+  it("gives one degree of latitude as about 111.2 km", function oneDegree() {
+    const origin: Address = { ...STREET, coordinates: { lat: 0, lon: 0 } };
+    expect(distanceTo(origin, { lat: 1, lon: 0 })).toBeCloseTo(111_195, 0);
+  });
+
+  it("stays finite for opposite points", function antipodes() {
+    const origin: Address = { ...STREET, coordinates: { lat: 0, lon: 0 } };
+    expect(distanceTo(origin, { lat: 0, lon: 180 })).toBeCloseTo(Math.PI * 6_371_008.8, 0);
   });
 });
