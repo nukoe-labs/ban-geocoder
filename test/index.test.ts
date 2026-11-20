@@ -115,17 +115,32 @@ describe("errors", function errorTests() {
     const geocoder = createGeocoder({ fetch: buildFakeFetch({}, 503).fetch });
     const failure = geocoder.search("paris");
     await expect(failure).rejects.toBeInstanceOf(GeocodingError);
-    await expect(failure).rejects.toMatchObject({ status: 503, message: "The geocoding service answered with HTTP 503." });
+    await expect(failure).rejects.toMatchObject({ code: "http", status: 503, message: "The geocoding service answered with HTTP 503." });
   });
 
   it("reports an answer that is not a feature collection", async function unreadableAnswer() {
     const geocoder = createGeocoder({ fetch: buildFakeFetch(null).fetch });
-    await expect(geocoder.reverse({ lat: 48, lon: 2 })).rejects.toThrow("without a list of features");
+    const failure = geocoder.reverse({ lat: 48, lon: 2 });
+    await expect(failure).rejects.toThrow("without a list of features");
+    await expect(failure).rejects.toMatchObject({ code: "format" });
+  });
+
+  it("reports an answer that is not JSON", async function notJson() {
+    /** Answers a body that the JSON decoder refuses. */
+    async function htmlFetch(): Promise<{ ok: boolean; status: number; json(): Promise<unknown> }> {
+      /** Fails like `Response.json()` on an HTML page. */
+      async function json(): Promise<unknown> {
+        throw new SyntaxError("Unexpected token '<'");
+      }
+      return { ok: true, status: 200, json };
+    }
+    const failure = createGeocoder({ fetch: htmlFetch }).search("paris");
+    await expect(failure).rejects.toMatchObject({ code: "format", message: "The geocoding service answered something that is not JSON: Unexpected token '<'" });
   });
 
   it("gives up after the time limit", async function timeout() {
     const geocoder = createGeocoder({ fetch: hangingFetch, timeoutMs: 20 });
-    await expect(geocoder.search("paris")).rejects.toMatchObject({ name: "GeocodingError", status: undefined });
+    await expect(geocoder.search("paris")).rejects.toMatchObject({ name: "GeocodingError", code: "timeout", status: undefined });
   });
 
   it("stops when the caller aborts", async function callerAbort() {
@@ -134,6 +149,16 @@ describe("errors", function errorTests() {
     const pending = geocoder.search("paris", { signal: controller.signal });
     controller.abort();
     await expect(pending).rejects.toThrow("could not be reached: The operation was aborted");
+    await expect(pending).rejects.toMatchObject({ code: "aborted" });
+  });
+
+  it("reports a network failure", async function networkFailure() {
+    /** Fails like `fetch` when the host cannot be resolved. */
+    async function offlineFetch(): Promise<never> {
+      throw new TypeError("fetch failed");
+    }
+    const failure = createGeocoder({ fetch: offlineFetch }).search("paris");
+    await expect(failure).rejects.toMatchObject({ code: "network", message: "The geocoding service could not be reached: fetch failed" });
   });
 
   it("uses the global fetch by default", function defaultFetch() {
