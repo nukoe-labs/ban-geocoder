@@ -1,0 +1,9 @@
+{
+  "$schema": "https://typedoc.org/schema.json",
+  "entryPoints": ["src/index.ts"],
+  "tsconfig": "tsconfig.build.json",
+  "out": "api-docs",
+  "name": "ban-geocoder",
+  "readme": "README.md",
+  "treatWarningsAsErrors": true
+}
