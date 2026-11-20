@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>ban-geocoder without a bundler</title>
+    <style>
+      :root { color-scheme: light dark; --text: #1a1a1a; --background: #ffffff; --border: #6b6b6b; }
+      @media (prefers-color-scheme: dark) {
+        :root { --text: #f2f2f2; --background: #121212; --border: #a0a0a0; }
+      }
+      body { font: 16px/1.5 system-ui, sans-serif; margin: 2rem auto; max-width: 36rem; padding: 0 1rem; color: var(--text); background: var(--background); }
+      input { box-sizing: border-box; width: 100%; padding: 0.5rem; font: inherit; color: var(--text); background: var(--background); border: 1px solid var(--border); }
+      li { padding: 0.25rem 0; }
+    </style>
+  </head>
+  <body>
+    <label for="address">Address</label>
+    <input id="address" autocomplete="off" placeholder="8 bd du port cergy">
+    <ul id="suggestions"></ul>
+
+    <script type="module">
+      // The ES module is built from the GitHub sources by esm.sh; pin a commit or a tag instead of "main" in production.
+      import { createAutocomplete, createGeocoder } from "https://esm.sh/gh/nukoe-labs/ban-geocoder@main/src/index.ts";
+
+      const input = document.getElementById("address");
+      const list = document.getElementById("suggestions");
+      const autocomplete = createAutocomplete(createGeocoder(), { delayMs: 250, limit: 5 });
+
+      /** Builds one list item that shows the label of an address. */
+      function toListItem(address) {
+        const item = document.createElement("li");
+        item.textContent = address.label;
+        return item;
+      }
+
+      /** Searches the typed text once the user stops typing, and shows the suggestions. */
+      async function showSuggestions() {
+        if (input.value.trim().length < 3) {
+          list.replaceChildren();
+          return;
+        }
+        const addresses = await autocomplete.suggest(input.value);
+        if (addresses === undefined) {
+          return;
+        }
+        list.replaceChildren(...addresses.map(toListItem));
+      }
+
+      input.addEventListener("input", showSuggestions);
+    </script>
+  </body>
+</html>

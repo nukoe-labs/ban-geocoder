@@ -118,6 +118,43 @@ input.addEventListener("input", async function showSuggestions() {
 Any other search option (`limit`, `type`, `near`…) is passed to each search. A text shorter than 3 characters is refused
 with a `RangeError`, as with `search`.
 
+### In a browser without a bundler
+
+A plain HTML page can import the ES module from a CDN. [esm.sh](https://esm.sh) builds it from the GitHub sources;
+pin a commit or a tag instead of `main` in production.
+
+```html
+<input id="address" autocomplete="off">
+<ul id="suggestions"></ul>
+<script type="module">
+  import { createAutocomplete, createGeocoder } from "https://esm.sh/gh/nukoe-labs/ban-geocoder@main/src/index.ts";
+
+  const input = document.getElementById("address");
+  const list = document.getElementById("suggestions");
+  const autocomplete = createAutocomplete(createGeocoder(), { delayMs: 250, limit: 5 });
+
+  function toListItem(address) {
+    const item = document.createElement("li");
+    item.textContent = address.label;
+    return item;
+  }
+
+  input.addEventListener("input", async function showSuggestions() {
+    if (input.value.trim().length < 3) {
+      list.replaceChildren();
+      return;
+    }
+    const addresses = await autocomplete.suggest(input.value);
+    if (addresses !== undefined) {
+      list.replaceChildren(...addresses.map(toListItem));
+    }
+  });
+</script>
+```
+
+The complete page is in [`examples/browser/index.html`](examples/browser/index.html). The IGN service allows calls
+from any origin (CORS).
+
 ### Options
 
 | Option | Where | Effect |
